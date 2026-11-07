@@ -1,0 +1,16 @@
+{
+  "versionId": "1.21.1",
+  "gameDirectory": ".\\.minecraft",
+  "account": {
+    "name": "OfflinePlayer",
+    "type": "offline"
+  },
+  "loader": {
+    "type": "vanilla"
+  },
+  "argumentMode": "auto",
+  "window": {
+    "width": 1280,
+    "height": 720
+  }
+}

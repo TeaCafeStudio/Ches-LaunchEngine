@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cheslaunchengine.dev/schemas/cle.schema.json",
+  "title": "ChesLaunchEngine configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version"],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "const": 1,
+      "description": "Configuration schema version."
+    },
+    "paths": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "gameDirectory": { "type": "string" },
+        "versionsDirectory": { "type": "string" }
+      }
+    },
+    "launch": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "argumentMode": { "type": "string", "enum": ["auto", "legacy", "modern"], "default": "auto" },
+        "timeoutSeconds": { "type": "integer", "minimum": 1, "default": 3600 }
+      }
+    },
+    "download": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "concurrency": { "type": "integer", "minimum": 1, "maximum": 64, "default": 8 },
+        "retries": { "type": "integer", "minimum": 0, "maximum": 10, "default": 3 },
+        "timeoutSeconds": { "type": "integer", "minimum": 1, "default": 300 },
+        "offline": { "type": "boolean", "default": false }
+      }
+    },
+    "java": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "path": { "type": "string" }
+      }
+    },
+    "account": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Account profile storage settings; never put tokens or passwords in this file.",
+      "properties": {
+        "defaultProvider": { "type": "string", "enum": ["", "offline"], "description": "Only offline is currently supported." },
+        "credentialStore": { "type": "string", "enum": [""], "description": "Reserved; no operating-system credential store is implemented." },
+        "storePath": { "type": "string", "description": "Path for non-sensitive account profiles." }
+      }
+    },
+    "logging": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "level": { "type": "string", "enum": ["DEBUG", "INFO", "WARN", "ERROR"], "default": "INFO" },
+        "console": { "type": "boolean", "default": true },
+        "directory": { "type": "string" },
+        "instanceId": { "type": "string" }
+      }
+    },
+    "api": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Reserved configuration only; no HTTP API server is implemented.",
+      "properties": {
+        "enabled": { "type": "boolean", "default": false },
+        "address": { "type": "string", "default": "127.0.0.1:8765" }
+      }
+    },
+    "debugTerminal": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean", "default": true },
+        "historyLimit": { "type": "integer", "minimum": 0, "maximum": 10000, "default": 1000 }
+      }
+    }
+  }
+}

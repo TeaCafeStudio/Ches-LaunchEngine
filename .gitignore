@@ -29,5 +29,30 @@ go.work.sum
 .env
 
 # Editor/IDE
-# .idea/
-# .vscode/
+.idea/
+.vscode/
+
+# Build output and temporary files
+/dist/
+/cle
+/cle-debug
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+
+# Logs and local runtime data
+*.log
+/logs/
+accounts.json
+accounts.*.json
+*.token
+
+# Local environment and credentials
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
