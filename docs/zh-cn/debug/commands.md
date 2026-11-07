@@ -54,11 +54,21 @@
 | `debug environment <task-id>` | 显示脱敏后的环境变量覆盖 | 排序的 `KEY=value` |
 | `account list` | 列出已保存账户及活动账户标记 | `<uuid> offline Alex (active)` |
 | `account add offline <name> [uuid]` | 创建离线账户；UUID 可选且须为标准格式 | 账户名、ID、UUID |
+| `account add yggdrasil <auth-server-url> <username>` | 添加 Yggdrasil 账户；密码通过隐藏交互提示读取，不得作为参数；要求 HTTPS | 创建账户及 UUID |
+| `account add microsoft` | 启动 OAuth Device Code 登录；显示验证网址和用户代码并轮询至完成；需配置 Client ID | 创建账户及 UUID |
 | `account inspect <id>` | 查看非敏感账户元数据 | 类型、用户名、显示名、UUID、时间 |
 | `account profile <id>` | 查看游戏资料 | 名称、ID、属性数量 |
-| `account validate <id>` | 本地校验离线资料 | `Account profile is valid.` |
+| `account validate <id>` | 本地校验离线资料，或远程验证 Yggdrasil 会话 | `Account profile is valid.` |
 | `account switch <id>` | 设为活动账户 | `Active account set to <id>` |
-| `account remove <id>` | 删除资料 | `Account removed.` |
-| `account refresh <id>` / `account logout <id>` | 离线账户不支持 | 返回明确的不支持错误 |
+| `account refresh <id>` | 刷新 Yggdrasil 会话；离线账户不支持 | `Account refreshed: <id>` |
+| `account logout <id>` | 使 Yggdrasil 会话失效并删除凭据；资料保留 | `Account session logged out.` |
+| `account remove <id>` | 删除资料及对应 Yggdrasil 凭据 | `Account removed.` |
+
+Yggdrasil Token 使用操作系统凭据库（Windows Credential Manager、macOS
+Keychain 或 Linux Secret Service）；Linux 需要可用的 Secret Service 会话。
+Microsoft 账户使用 OAuth Device Code 流程，其 Refresh Token、OAuth Access
+Token 与 Minecraft Access Token 同样通过操作系统凭据库按账户 ID 隔离保存。
+Microsoft 账户需要配置 Microsoft 公共客户端应用 ID（`account.microsoft.clientId`
+或 `CLE_MICROSOFT_CLIENT_ID`），CLE 不内置 Client ID。
 
 `cle-debug --command "help"` 执行单条命令后退出；单次 `launch` 会等待任务完成并输出事件。本程序不是机器可读 JSON 协议；正式 CLI 的 JSON 响应请用 `cle --json`。

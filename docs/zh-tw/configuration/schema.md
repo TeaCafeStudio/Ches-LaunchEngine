@@ -15,7 +15,7 @@
 | `download.offline` | boolean | 否 | `false` |
 | `java.path` | string | 否 | 空；自動偵測 |
 | `account.defaultProvider` | string | 否 | 空；目前只支援 `offline` |
-| `account.credentialStore` | string | 否 | 空；非空值目前不支援 |
+| `account.credentialStore` | string | 否 | 空；目前支援 `os`（作業系統預設憑證庫） |
 | `account.storePath` | string | 否 | 空；使用作業系統使用者設定路徑；不得全為空白 |
 | `logging.level` | string | 否 | `INFO`；允許 `DEBUG`、`INFO`、`WARN`、`ERROR` |
 | `logging.console` | boolean | 否 | `true`；記錄寫入 stderr |

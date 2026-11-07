@@ -35,14 +35,29 @@ func TestDecodeAccountProfileStorePath(t *testing.T) {
 	}
 }
 
+func TestDecodeAcceptsOperatingSystemCredentialStore(t *testing.T) {
+	if _, err := Decode(strings.NewReader(`{"version":1,"account":{"credentialStore":"os"}}`)); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestDecodeRejectsUnsupportedOnlineAccountSettings(t *testing.T) {
 	for _, value := range []string{
-		`{"version":1,"account":{"defaultProvider":"microsoft"}}`,
 		`{"version":1,"account":{"credentialStore":"keychain"}}`,
 	} {
 		if _, err := Decode(strings.NewReader(value)); err == nil {
 			t.Fatalf("Decode(%s) accepted unsupported account settings", value)
 		}
+	}
+}
+
+func TestDecodeAcceptsMicrosoftDefaultProvider(t *testing.T) {
+	cfg, err := Decode(strings.NewReader(`{"version":1,"account":{"defaultProvider":"microsoft","microsoft":{"clientId":"client-id"}}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Account.DefaultProvider != "microsoft" || cfg.Account.Microsoft.ClientID != "client-id" {
+		t.Fatalf("account settings = %+v", cfg.Account)
 	}
 }
 

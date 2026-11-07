@@ -56,12 +56,24 @@ are validated by each handler. Examples below show representative output.
 | `debug environment <task-id>` | Show configured overrides with sensitive values redacted. | Sorted `KEY=value` lines. |
 | `account list` | List stored profiles and mark the active profile. | `<uuid> offline Alex (active)` |
 | `account add offline Alex [uuid]` | Create and select a local offline profile. UUID is optional, canonical format. | `Created offline account Alex (<id>), UUID <uuid>.` |
+| `account add yggdrasil <auth-server-url> <username>` | Add a Yggdrasil account; password is read through a hidden interactive prompt, never from an argument. Requires HTTPS. | `Created Yggdrasil account Alex (<id>), UUID <uuid>.` |
+| `account add microsoft` | Start the OAuth Device Code login; shows the verification URL and user code and polls until completion. Requires a configured Client ID. | `Created Microsoft account Alex (<id>), UUID <uuid>.` |
 | `account inspect <id>` | Display non-secret account metadata. | ID, type, username, display name, UUID, creation/update timestamps. |
 | `account profile <id>` | Display profile ID/name and property count. | `Profile: Alex (<uuid>), properties: 0` |
-| `account validate <id>` | Validate the offline profile locally. | `Account profile is valid.` |
+| `account validate <id>` | Validate an offline profile locally or a Yggdrasil session remotely. | `Account profile is valid.` |
 | `account switch <id>` | Select an offline profile as active. | `Active account set to <id>` |
-| `account remove <id>` | Delete the profile. | `Account removed.` |
-| `account refresh <id>` / `account logout <id>` | Unsupported for offline profiles. | Returns an explicit unsupported-operation error. |
+| `account refresh <id>` | Refresh a Yggdrasil session. Offline refresh is unsupported. | `Account refreshed: <id>` |
+| `account logout <id>` | Invalidate and delete Yggdrasil credentials; profile remains. Offline logout is unsupported. | `Account session logged out.` |
+| `account remove <id>` | Delete the profile and associated Yggdrasil credentials. | `Account removed.` |
+
+Yggdrasil tokens use the operating-system credential store (Windows Credential
+Manager, macOS Keychain, or Linux Secret Service); Linux requires an available
+Secret Service session. Microsoft accounts use the OAuth Device Code flow; their
+refresh token, OAuth access token, and Minecraft access token are also stored in
+the operating-system credential store keyed by account ID. Microsoft accounts
+require a Microsoft public-client application ID (`account.microsoft.clientId` or
+the `CLE_MICROSOFT_CLIENT_ID` environment variable); CLE ships no hard-coded
+Client ID.
 
 `cle-debug --command "help"` executes one command and exits; a one-shot
 `launch` waits for the task to finish and streams its events. This is not a

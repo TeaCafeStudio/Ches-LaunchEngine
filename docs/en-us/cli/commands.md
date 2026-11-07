@@ -62,6 +62,31 @@ cle -config .\cle.json -launch .\examples\launch\vanilla.json
   `cle --json -check-config cle.json`, and
   `cle --json -launch request.json`.
 
+## `cle account`
+
+Account management subcommands. Use `--config <cle.json>` to load
+`account.storePath` and `account.microsoft.clientId`, and `--json` for a JSON
+response.
+
+| Command | Purpose |
+|---|---|
+| `cle account list` | List stored accounts and mark the active account |
+| `cle account add microsoft` | Start the OAuth Device Code login; the verification URL and user code are written to stderr, then the command polls until completion |
+| `cle account show <account-id>` | Show non-secret account metadata |
+| `cle account remove <account-id>` | Remove the account and its stored credentials |
+
+```powershell
+cle account add microsoft --config .\cle.json
+cle account list
+cle account show <account-id>
+cle account remove <account-id>
+```
+
+Microsoft accounts require a Microsoft public-client application ID
+(`account.microsoft.clientId` in the configuration file or the
+`CLE_MICROSOFT_CLIENT_ID` environment variable); CLE ships no hard-coded
+Client ID.
+
 ## `cle debug`
 
 Deprecated migration path only. It does not initialize or import the terminal.

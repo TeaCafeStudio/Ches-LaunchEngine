@@ -13,4 +13,7 @@ ChesLaunchEngine（CLE）是面向 Minecraft Java Edition 的 Go 引擎，提供
 - [HTTP API 状态](api/overview.md) · [JSON 约定](api/json-format.md) · [规划中的端点](api/endpoints.md)
 - [Go SDK](sdk/go.md) · [构建与测试](development/build.md) · [架构](development/architecture.md) · [贡献指南](development/contribution.md)
 
-Microsoft/Yggdrasil 在线认证、非 Go SDK、模组加载器和 HTTP API 尚未实现。命令、JSON 键名、路径和代码标识符均保留原样。
+离线账户和 Yggdrasil 账户已实现。Yggdrasil 启动使用 SHA-256 固定校验的
+Authlib Injector 1.2.8 Java Agent；尚未验证真实认证、进入 Minecraft 主菜单或
+操作系统凭据库运行行为。Microsoft 认证、非 Go SDK、模组加载器和 HTTP API
+尚未实现。命令、JSON 键名、路径和代码标识符均保留原样。

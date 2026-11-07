@@ -22,7 +22,7 @@
 | `javaPath` | string | 選填 | Java 程式；預設使用設定值或自動偵測 |
 | `javaArguments` | string array | 選填 | 額外 JVM 參數 |
 | `gameArguments` | string array | 選填 | 額外遊戲參數 |
-| `account` | object | 啟動需要離線帳戶 | 內嵌離線身分或已儲存的 `id` |
+| `account` | object | 設定未提供時必填 | 內嵌離線身分或已儲存帳戶 `id`（離線或 Yggdrasil） |
 | `loader` | object | 選填；預設 Vanilla | 目前 `type` 只支援 `vanilla`；`version` 為後續載入器預留 |
 | `downloadOptions` | object | 選填 | `offline` 布林值；`concurrency` 為 0/預設或 1–64；`retries` 為 0/預設或 0–10 |
 | `window` | object | 選填 | `width`、`height` 整數和 `fullscreen` 布林值 |
@@ -30,7 +30,7 @@
 | `workingDirectory` | string | 選填 | 必須是現存目錄；否則使用遊戲目錄 |
 | `argumentMode` | string | 選填；預設 `auto` | `auto`、`legacy` 或 `modern` |
 
-帳戶模型也接受 `id`、`name`、`uuid`、`displayName`、`profile`、`type`、`credentialRef`、`xuid`、`userType` 和時間戳記。本階段只支援離線身分：使用有效的 `name` 和選填標準 UUID，或已儲存帳戶 `id`。啟動要求不得包含 Token 或密碼。
+帳戶模型也接受 `id`、`name`、`uuid`、`displayName`、`profile`、`type`、`authServer`、`credentialRef`、`xuid`、`userType` 和時間戳記。可使用有效的內嵌離線身分或已儲存帳戶 `id`。Yggdrasil 啟動必須使用已儲存帳戶 ID，讓 CLE 從作業系統憑證庫讀取並驗證工作階段。啟動要求不得包含 Token 或密碼。
 
 使用已儲存帳戶的範例：
 

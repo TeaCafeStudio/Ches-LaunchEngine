@@ -14,9 +14,10 @@
 | `download.timeoutSeconds` | integer | 否 | `300`；必须为正数 |
 | `download.offline` | boolean | 否 | `false` |
 | `java.path` | string | 否 | 空；自动检测 |
-| `account.defaultProvider` | string | 否 | 空；目前只支持 `offline` |
-| `account.credentialStore` | string | 否 | 空；非空值当前不支持 |
+| `account.defaultProvider` | string | 否 | 空；支持 `offline`、`yggdrasil`、`microsoft` |
+| `account.credentialStore` | string | 否 | 空；目前支持 `os`（操作系统默认凭据库） |
 | `account.storePath` | string | 否 | 空；使用操作系统用户配置路径；不能全为空白 |
+| `account.microsoft.clientId` | string | 否 | 空；Microsoft 公共客户端应用 ID；也可用 `CLE_MICROSOFT_CLIENT_ID` 环境变量 |
 | `logging.level` | string | 否 | `INFO`；允许 `DEBUG`、`INFO`、`WARN`、`ERROR` |
 | `logging.console` | boolean | 否 | `true`；日志写入 stderr |
 | `logging.directory` | string | 否 | 空；设置后须同时提供 `instanceId` |
@@ -39,7 +40,7 @@
   "launch": {"argumentMode": "auto", "timeoutSeconds": 3600},
   "download": {"concurrency": 8, "retries": 3, "timeoutSeconds": 300, "offline": false},
   "java": {"path": "java"},
-  "account": {"defaultProvider": "offline", "storePath": "./accounts.json"},
+  "account": {"defaultProvider": "offline", "storePath": "./accounts.json", "microsoft": {"clientId": "your-public-client-id"}},
   "logging": {"level": "INFO", "console": true},
   "api": {"enabled": false, "address": "127.0.0.1:8765"},
   "debugTerminal": {"enabled": true, "historyLimit": 1000}

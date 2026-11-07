@@ -46,9 +46,17 @@ type Java struct {
 }
 
 type Account struct {
-	DefaultProvider string `json:"defaultProvider,omitempty"`
-	CredentialStore string `json:"credentialStore,omitempty"`
-	StorePath       string `json:"storePath,omitempty"`
+	DefaultProvider string    `json:"defaultProvider,omitempty"`
+	CredentialStore string    `json:"credentialStore,omitempty"`
+	StorePath       string    `json:"storePath,omitempty"`
+	Microsoft       Microsoft `json:"microsoft,omitempty"`
+}
+
+// Microsoft holds Microsoft Account authentication settings. The Client ID is
+// an application (public client) identifier owned by the operator; CLE never
+// bundles a hard-coded Client ID or Client Secret.
+type Microsoft struct {
+	ClientID string `json:"clientId,omitempty"`
 }
 
 type Logging struct {
@@ -161,11 +169,13 @@ func (cfg Config) Validate() error {
 	if cfg.DebugTerminal.HistoryLimit < 0 || cfg.DebugTerminal.HistoryLimit > 10000 {
 		return cleerrors.New(cleerrors.CodeInvalidConfiguration, "debugTerminal.historyLimit must be between 0 and 10000")
 	}
-	if cfg.Account.DefaultProvider != "" && cfg.Account.DefaultProvider != "offline" {
-		return cleerrors.New(cleerrors.CodeInvalidConfiguration, "account.defaultProvider is not supported in Phase 4.1")
+	switch cfg.Account.DefaultProvider {
+	case "", "offline", "yggdrasil", "microsoft":
+	default:
+		return cleerrors.New(cleerrors.CodeInvalidConfiguration, "account.defaultProvider must be offline, yggdrasil, or microsoft")
 	}
-	if strings.TrimSpace(cfg.Account.CredentialStore) != "" {
-		return cleerrors.New(cleerrors.CodeInvalidConfiguration, "account.credentialStore is not supported in Phase 4.1")
+	if cfg.Account.CredentialStore != "" && cfg.Account.CredentialStore != "os" {
+		return cleerrors.New(cleerrors.CodeInvalidConfiguration, "account.credentialStore must be os when specified")
 	}
 	if cfg.Account.StorePath != "" && strings.TrimSpace(cfg.Account.StorePath) == "" {
 		return cleerrors.New(cleerrors.CodeInvalidConfiguration, "account.storePath cannot be blank")

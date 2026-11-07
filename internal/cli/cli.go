@@ -38,12 +38,17 @@ type Result struct {
 	Message string `json:"message,omitempty"`
 	Version string `json:"version,omitempty"`
 	Task    any    `json:"task,omitempty"`
+	Account any    `json:"account,omitempty"`
 }
 
 func Run(args []string, stdout, stderr io.Writer) int {
 	jsonOutput := containsJSONFlag(args)
 	if len(args) > 0 && args[0] == "debug" {
 		return report(stdout, stderr, jsonOutput, nil, errors.New("the Debug Terminal has moved to the separate cle-debug program; run cle-debug"))
+	}
+	if len(args) > 0 && args[0] == "account" {
+		result, err := runAccount(args[1:], stdout, stderr, jsonOutput)
+		return report(stdout, stderr, jsonOutput, result, err)
 	}
 	flags := flag.NewFlagSet("cle", flag.ContinueOnError)
 	flags.SetOutput(stderr)
@@ -111,16 +116,11 @@ func launch(cfg config.Config, requestPath string, jsonOutput bool) (Result, err
 				return Result{}, err
 			}
 		}
-		accountManager, err = accounts.NewManager(storePath)
+		accountManager, err = accounts.NewManagerWithClientID(storePath, cfg.Account.Microsoft.ClientID)
 		if err != nil {
 			return Result{}, fmt.Errorf("initialize account manager: %w", err)
 		}
 	}
-	request.Account, err = accounts.ResolveLaunchAccount(context.Background(), accountManager, request.Account)
-	if err != nil {
-		return Result{}, fmt.Errorf("resolve launch account: %w", err)
-	}
-
 	logger, closeLogger, err := newLogger(cfg, jsonOutput)
 	if err != nil {
 		return Result{}, err
@@ -130,7 +130,7 @@ func launch(cfg config.Config, requestPath string, jsonOutput bool) (Result, err
 			logger.Error("close logger", "error", core.RedactText(closeErr.Error()))
 		}
 	}()
-	engine, err := sdk.NewDebugEngineWithConfig(cfg, logger, nil, "")
+	engine, err := sdk.NewDebugEngineWithConfigAndAccounts(cfg, logger, nil, "", accountManager)
 	if err != nil {
 		return Result{}, err
 	}
@@ -183,6 +183,129 @@ func launch(cfg config.Config, requestPath string, jsonOutput bool) (Result, err
 				return Result{}, errors.New("Minecraft launch was cancelled")
 			}
 		}
+	}
+}
+
+func runAccount(args []string, stdout, stderr io.Writer, jsonOutput bool) (Result, error) {
+	configPath := ""
+	positional := make([]string, 0, len(args))
+	for index := 0; index < len(args); index++ {
+		arg := args[index]
+		switch {
+		case arg == "-config" || arg == "--config":
+			if index+1 >= len(args) {
+				return Result{}, errors.New("-config requires a file path")
+			}
+			configPath = args[index+1]
+			index++
+		case strings.HasPrefix(arg, "-"):
+			return Result{}, fmt.Errorf("unexpected flag %s", arg)
+		default:
+			positional = append(positional, arg)
+		}
+	}
+	if len(positional) == 0 {
+		return Result{}, errors.New("usage: cle account <list|add|show|remove> [--config <cle.json>]")
+	}
+	cfg := config.Default()
+	if configPath != "" {
+		loaded, err := config.LoadFile(configPath)
+		if err != nil {
+			return Result{}, err
+		}
+		cfg = loaded
+	}
+	storePath := cfg.Account.StorePath
+	var err error
+	if storePath == "" {
+		storePath, err = accounts.DefaultStorePath()
+		if err != nil {
+			return Result{}, err
+		}
+	}
+	manager, err := accounts.NewManagerWithClientID(storePath, cfg.Account.Microsoft.ClientID)
+	if err != nil {
+		return Result{}, fmt.Errorf("initialize account manager: %w", err)
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+
+	switch positional[0] {
+	case "list":
+		if len(positional) != 1 {
+			return Result{}, errors.New("usage: cle account list")
+		}
+		list, err := manager.ListAccounts(ctx)
+		if err != nil {
+			return Result{}, err
+		}
+		if !jsonOutput {
+			active, activeErr := manager.ActiveAccount(ctx)
+			for _, account := range list {
+				marker := ""
+				if activeErr == nil && account.ID == active.ID {
+					marker = " (active)"
+				}
+				fmt.Fprintf(stdout, "%s %s %s%s\n", account.ID, account.Type, account.Name, marker)
+			}
+		}
+		return Result{Command: "account list", Account: list}, nil
+	case "show":
+		if len(positional) != 2 {
+			return Result{}, errors.New("usage: cle account show <account-id>")
+		}
+		account, err := manager.GetAccount(ctx, positional[1])
+		if err != nil {
+			return Result{}, err
+		}
+		if !jsonOutput {
+			fmt.Fprintf(stdout, "ID: %s\nType: %s\nUsername: %s\nDisplay name: %s\nUUID: %s\n",
+				account.ID, account.Type, account.Name, account.DisplayName, account.UUID)
+		}
+		return Result{Command: "account show", Account: account}, nil
+	case "add":
+		if len(positional) != 2 || positional[1] != "microsoft" {
+			return Result{}, errors.New("usage: cle account add microsoft")
+		}
+		provider, err := manager.Provider(models.AccountMicrosoft)
+		if err != nil {
+			return Result{}, err
+		}
+		auth, ok := provider.(accounts.DeviceCodeAuthenticator)
+		if !ok {
+			return Result{}, errors.New("Microsoft account provider is unavailable")
+		}
+		deviceCode, err := auth.StartDeviceCode(ctx)
+		if err != nil {
+			return Result{}, err
+		}
+		fmt.Fprintf(stderr, "Open %s and enter the code %s\n", deviceCode.VerificationURL, deviceCode.UserCode)
+		fmt.Fprintln(stderr, "Waiting for Microsoft authorization (cancel with Ctrl+C)...")
+		account, err := auth.AuthenticateDeviceCode(ctx, deviceCode)
+		if err != nil {
+			return Result{}, err
+		}
+		stored, err := manager.AddAccount(ctx, account)
+		if err != nil {
+			return Result{}, err
+		}
+		if !jsonOutput {
+			fmt.Fprintf(stdout, "Created Microsoft account %s (%s), UUID %s.\n", stored.Name, stored.ID, stored.UUID)
+		}
+		return Result{Command: "account add", Account: stored, Message: "Created Microsoft account " + stored.Name}, nil
+	case "remove":
+		if len(positional) != 2 {
+			return Result{}, errors.New("usage: cle account remove <account-id>")
+		}
+		if err := manager.RemoveAccount(ctx, positional[1]); err != nil {
+			return Result{}, err
+		}
+		if !jsonOutput {
+			fmt.Fprintf(stdout, "Account removed: %s\n", positional[1])
+		}
+		return Result{Command: "account remove", Message: "Account removed: " + positional[1]}, nil
+	default:
+		return Result{}, errors.New("usage: cle account <list|add|show|remove> [--config <cle.json>]")
 	}
 }
 

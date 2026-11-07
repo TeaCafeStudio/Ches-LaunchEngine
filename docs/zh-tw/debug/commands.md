@@ -54,11 +54,21 @@
 | `debug environment <task-id>` | 顯示已遮蔽的環境變數覆寫 | 排序後的 `KEY=value` |
 | `account list` | 列出已儲存帳戶並標示作用中帳戶 | `<uuid> offline Alex (active)` |
 | `account add offline <name> [uuid]` | 建立離線帳戶；UUID 選填且須為標準格式 | 帳戶名稱、ID、UUID |
+| `account add yggdrasil <auth-server-url> <username>` | 新增 Yggdrasil 帳戶；密碼透過隱藏互動提示讀取，不得作為參數；要求 HTTPS | 建立帳戶及 UUID |
+| `account add microsoft` | 啟動 OAuth Device Code 登入；顯示驗證網址與使用者代碼並輪詢至完成；需設定 Client ID | 建立帳戶及 UUID |
 | `account inspect <id>` | 查看非敏感帳戶中繼資料 | 類型、使用者名稱、顯示名稱、UUID、時間 |
 | `account profile <id>` | 查看遊戲資料 | 名稱、ID、屬性數量 |
-| `account validate <id>` | 在本機驗證離線資料 | `Account profile is valid.` |
+| `account validate <id>` | 在本機驗證離線資料，或遠端驗證 Yggdrasil 工作階段 | `Account profile is valid.` |
 | `account switch <id>` | 設為作用中帳戶 | `Active account set to <id>` |
-| `account remove <id>` | 刪除資料 | `Account removed.` |
-| `account refresh <id>` / `account logout <id>` | 離線帳戶不支援 | 回傳明確的不支援錯誤 |
+| `account refresh <id>` | 更新 Yggdrasil 工作階段；離線帳戶不支援 | `Account refreshed: <id>` |
+| `account logout <id>` | 使 Yggdrasil 工作階段失效並刪除憑證；資料仍保留 | `Account session logged out.` |
+| `account remove <id>` | 刪除資料及對應的 Yggdrasil 憑證 | `Account removed.` |
+
+Yggdrasil Token 使用作業系統憑證庫（Windows Credential Manager、macOS
+Keychain 或 Linux Secret Service）；Linux 需要可用的 Secret Service 工作階段。
+Microsoft 帳戶使用 OAuth Device Code 流程，其 Refresh Token、OAuth Access
+Token 與 Minecraft Access Token 同樣透過作業系統憑證庫按帳戶 ID 隔離儲存。
+Microsoft 帳戶需設定 Microsoft 公開用戶端應用程式 ID（`account.microsoft.clientId`
+或 `CLE_MICROSOFT_CLIENT_ID`），CLE 不內建 Client ID。
 
 `cle-debug --command "help"` 執行單一命令後退出；單次 `launch` 會等待工作完成並輸出事件。本程式不是機器可讀 JSON 協定；正式 CLI 的 JSON 回應請使用 `cle --json`。

@@ -20,6 +20,8 @@ import (
 
 var ErrExit = errors.New("terminal exit")
 
+const maximumSecretInputLength = 4096
+
 type Options struct {
 	Engine              core.DebugEngine
 	Accounts            core.AccountManager
@@ -90,6 +92,7 @@ type Terminal struct {
 	displayEvents  bool
 	nonInteractive bool
 	currentTaskID  string
+	secretPrompt   string
 }
 
 func New(options Options) (*Terminal, error) {
@@ -437,6 +440,68 @@ func (terminal *Terminal) currentLine() string {
 	return string(terminal.line)
 }
 
+func (terminal *Terminal) readSecret(prompt string) ([]byte, error) {
+	terminal.mu.Lock()
+	interactive := terminal.interactive
+	inputFile := terminal.inputFile
+	terminal.secretPrompt = prompt
+	terminal.mu.Unlock()
+	if !interactive || inputFile == nil {
+		terminal.mu.Lock()
+		terminal.secretPrompt = ""
+		terminal.mu.Unlock()
+		return nil, errors.New("secret input requires an interactive terminal; passwords cannot be supplied as command arguments")
+	}
+	defer func() {
+		terminal.mu.Lock()
+		terminal.secretPrompt = ""
+		terminal.mu.Unlock()
+	}()
+	terminal.outputLocked(prompt)
+	secret := make([]byte, 0, 64)
+	overflow := false
+	for {
+		var value [1]byte
+		if _, err := inputFile.Read(value[:]); err != nil {
+			zeroBytes(secret)
+			return nil, fmt.Errorf("read hidden password input: %w", err)
+		}
+		switch value[0] {
+		case '\r', '\n':
+			terminal.outputLocked("\r\n")
+			if overflow {
+				return nil, errors.New("hidden password exceeds the 4096-byte limit")
+			}
+			return secret, nil
+		case 3:
+			zeroBytes(secret)
+			terminal.outputLocked("^C\r\n")
+			return nil, context.Canceled
+		case 8, 127:
+			if !overflow && len(secret) > 0 {
+				secret[len(secret)-1] = 0
+				secret = secret[:len(secret)-1]
+			}
+		default:
+			if value[0] >= 32 && !overflow {
+				if len(secret) >= maximumSecretInputLength {
+					zeroBytes(secret)
+					secret = nil
+					overflow = true
+					continue
+				}
+				secret = append(secret, value[0])
+			}
+		}
+	}
+}
+
+func zeroBytes(value []byte) {
+	for index := range value {
+		value[index] = 0
+	}
+}
+
 func (terminal *Terminal) remember(line string) {
 	line = strings.TrimSpace(line)
 	if line == "" || terminal.historyLimit == 0 {
@@ -459,7 +524,11 @@ func (terminal *Terminal) printLine(value string) {
 	}
 	fmt.Fprintln(terminal.output, value)
 	if terminal.interactive {
-		fmt.Fprintf(terminal.output, "cle> %s", string(terminal.line))
+		if terminal.secretPrompt != "" {
+			fmt.Fprint(terminal.output, terminal.secretPrompt)
+		} else {
+			fmt.Fprintf(terminal.output, "cle> %s", string(terminal.line))
+		}
 	}
 }
 

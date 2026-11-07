@@ -28,7 +28,7 @@ configuration and is not checked by the CLE config schema.
 | `javaPath` | string | Optional | Java executable; defaults to configured/detected Java. |
 | `javaArguments` | string array | Optional | Additional JVM arguments. |
 | `gameArguments` | string array | Optional | Additional game arguments. |
-| `account` | object | Offline required for launch | Inline offline identity or stored `id`; see below. |
+| `account` | object | Required unless configured | Inline offline identity or stored account `id` (Offline or Yggdrasil); see below. |
 | `loader` | object | Optional; Vanilla | `type` currently supports `vanilla` only; `version` is reserved for loaders. |
 | `downloadOptions` | object | Optional | `offline` bool, `concurrency` 0/default or 1-64, `retries` 0/default or 0-10. |
 | `window` | object | Optional | `width`, `height` integers and `fullscreen` bool. |
@@ -37,9 +37,10 @@ configuration and is not checked by the CLE config schema.
 | `argumentMode` | string | Optional; `auto` | `auto`, `legacy`, or `modern`. |
 
 Account fields accepted by the model include `id`, `name`, `uuid`,
-`displayName`, `profile`, `type`, `credentialRef`, `xuid`, `userType`, and
-timestamps. Phase 4.1.1 supports offline identities only. Use either a valid
-offline `name` and optional standard UUID, or a stored account `id`. Tokens and
+`displayName`, `profile`, `type`, `authServer`, `credentialRef`, `xuid`,
+`userType`, and timestamps. Use either a valid inline Offline identity or a
+stored account `id`. Yggdrasil launches require a stored account ID so CLE can
+retrieve and validate its session from the OS credential store. Tokens and
 passwords are not part of a launch request.
 
 ## Stored account example

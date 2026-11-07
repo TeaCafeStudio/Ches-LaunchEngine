@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/TeaCafeStudio/Ches-LaunchEngine/pkg/core"
+	cleerrors "github.com/TeaCafeStudio/Ches-LaunchEngine/pkg/errors"
 	"github.com/TeaCafeStudio/Ches-LaunchEngine/pkg/models"
 )
 
@@ -33,18 +34,46 @@ type Manager struct {
 	providers map[models.AccountType]core.AccountProvider
 	accounts  map[string]models.Account
 	activeID  string
+	locksMu   sync.Mutex
+	locks     map[string]*accountLock
 }
 
 func NewManager(path string, providers ...core.AccountProvider) (*Manager, error) {
 	manager := &Manager{
 		path: path, providers: make(map[models.AccountType]core.AccountProvider),
-		accounts: make(map[string]models.Account),
+		accounts: make(map[string]models.Account), locks: make(map[string]*accountLock),
 	}
 	if err := manager.RegisterProvider(NewOfflineProvider()); err != nil {
 		return nil, err
 	}
+	hasYggdrasilProvider := false
+	hasMicrosoftProvider := false
 	for _, provider := range providers {
 		if err := manager.RegisterProvider(provider); err != nil {
+			return nil, err
+		}
+		if provider.Type() == models.AccountYggdrasil {
+			hasYggdrasilProvider = true
+		}
+		if provider.Type() == models.AccountMicrosoft {
+			hasMicrosoftProvider = true
+		}
+	}
+	if !hasYggdrasilProvider {
+		yggdrasilProvider, err := NewYggdrasilProvider(YggdrasilOptions{Credentials: NewOSKeyring()})
+		if err != nil {
+			return nil, err
+		}
+		if err := manager.RegisterProvider(yggdrasilProvider); err != nil {
+			return nil, err
+		}
+	}
+	if !hasMicrosoftProvider {
+		microsoftProvider, err := NewMicrosoftProvider(MicrosoftOptions{Credentials: NewOSKeyring()})
+		if err != nil {
+			return nil, err
+		}
+		if err := manager.RegisterProvider(microsoftProvider); err != nil {
 			return nil, err
 		}
 	}
@@ -54,6 +83,21 @@ func NewManager(path string, providers ...core.AccountProvider) (*Manager, error
 		}
 	}
 	return manager, nil
+}
+
+// NewManagerWithClientID builds a manager whose Microsoft provider is configured
+// with the given OAuth public-client application ID. When clientID is empty, the
+// provider falls back to the CLE_MICROSOFT_CLIENT_ID environment variable.
+func NewManagerWithClientID(path string, clientID string) (*Manager, error) {
+	var providers []core.AccountProvider
+	if strings.TrimSpace(clientID) != "" {
+		microsoftProvider, err := NewMicrosoftProvider(MicrosoftOptions{Credentials: NewOSKeyring(), ClientID: clientID})
+		if err != nil {
+			return nil, err
+		}
+		providers = append(providers, microsoftProvider)
+	}
+	return NewManager(path, providers...)
 }
 
 func (manager *Manager) RegisterProvider(provider core.AccountProvider) error {
@@ -89,14 +133,46 @@ func (manager *Manager) AuthenticateAccount(ctx context.Context, request models.
 		return models.Account{}, err
 	}
 	if account.Type != request.Type || account.ID == "" {
-		return models.Account{}, errors.New("account provider returned an invalid account")
+		invalidAccountErr := errors.New("account provider returned an invalid account")
+		if err := deleteAccountCredentials(ctx, provider, account); err != nil {
+			return models.Account{}, errors.Join(invalidAccountErr, fmt.Errorf("clean up rejected account credentials: %w", err))
+		}
+		return models.Account{}, invalidAccountErr
+	}
+	if err := provider.Validate(ctx, account); err != nil {
+		validationErr := fmt.Errorf("account provider returned an invalid profile: %w", err)
+		if cleanupErr := deleteAccountCredentials(ctx, provider, account); cleanupErr != nil {
+			return models.Account{}, errors.Join(validationErr, fmt.Errorf("clean up rejected account credentials: %w", cleanupErr))
+		}
+		return models.Account{}, validationErr
+	}
+	return manager.commitNewAccount(ctx, provider, account)
+}
+
+// AddAccount persists an account that was produced by a provider's dedicated
+// interactive flow (for example the Microsoft OAuth device code flow), where
+// credentials have already been stored by the provider.
+func (manager *Manager) AddAccount(ctx context.Context, account models.Account) (models.Account, error) {
+	if account.ID == "" || strings.TrimSpace(string(account.Type)) == "" {
+		return models.Account{}, errors.New("account ID and type are required")
+	}
+	provider, err := manager.Provider(account.Type)
+	if err != nil {
+		return models.Account{}, err
 	}
 	if err := provider.Validate(ctx, account); err != nil {
 		return models.Account{}, fmt.Errorf("account provider returned an invalid profile: %w", err)
 	}
+	return manager.commitNewAccount(ctx, provider, account)
+}
+
+func (manager *Manager) commitNewAccount(ctx context.Context, provider core.AccountProvider, account models.Account) (models.Account, error) {
 	manager.mu.Lock()
 	defer manager.mu.Unlock()
 	if _, exists := manager.accounts[account.ID]; exists {
+		if err := deleteAccountCredentials(ctx, provider, account); err != nil {
+			return models.Account{}, fmt.Errorf("duplicate account ID; clean up credentials: %w", err)
+		}
 		return models.Account{}, errors.New("account provider returned a duplicate account ID")
 	}
 	nextAccounts := cloneAccounts(manager.accounts)
@@ -106,6 +182,9 @@ func (manager *Manager) AuthenticateAccount(ctx context.Context, request models.
 		nextActiveID = account.ID
 	}
 	if err := manager.persistLocked(nextAccounts, nextActiveID); err != nil {
+		if cleanupErr := deleteAccountCredentials(ctx, provider, account); cleanupErr != nil {
+			return models.Account{}, errors.Join(err, fmt.Errorf("clean up credentials after account persistence failed: %w", cleanupErr))
+		}
 		return models.Account{}, err
 	}
 	manager.accounts, manager.activeID = nextAccounts, nextActiveID
@@ -145,6 +224,8 @@ func (manager *Manager) GetAccount(ctx context.Context, id string) (models.Accou
 }
 
 func (manager *Manager) ValidateAccount(ctx context.Context, id string) error {
+	unlock := manager.lockAccount(id)
+	defer unlock()
 	account, provider, err := manager.accountAndProvider(ctx, id)
 	if err != nil {
 		return err
@@ -153,6 +234,8 @@ func (manager *Manager) ValidateAccount(ctx context.Context, id string) error {
 }
 
 func (manager *Manager) RefreshAccount(ctx context.Context, id string) (models.Account, error) {
+	unlock := manager.lockAccount(id)
+	defer unlock()
 	account, provider, err := manager.accountAndProvider(ctx, id)
 	if err != nil {
 		return models.Account{}, err
@@ -177,6 +260,8 @@ func (manager *Manager) GetAccountProfile(ctx context.Context, id string) (model
 }
 
 func (manager *Manager) LogoutAccount(ctx context.Context, id string) error {
+	unlock := manager.lockAccount(id)
+	defer unlock()
 	account, provider, err := manager.accountAndProvider(ctx, id)
 	if err != nil {
 		return err
@@ -185,25 +270,95 @@ func (manager *Manager) LogoutAccount(ctx context.Context, id string) error {
 }
 
 func (manager *Manager) RemoveAccount(ctx context.Context, id string) error {
+	unlock := manager.lockAccount(id)
+	defer unlock()
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	manager.mu.Lock()
-	defer manager.mu.Unlock()
 	if _, exists := manager.accounts[id]; !exists {
+		manager.mu.Unlock()
 		return fmt.Errorf("account %q was not found", id)
 	}
+	account := manager.accounts[id]
 	nextAccounts := cloneAccounts(manager.accounts)
 	delete(nextAccounts, id)
 	nextActiveID := manager.activeID
 	if nextActiveID == id {
 		nextActiveID = ""
 	}
+	provider := manager.providers[account.Type]
 	if err := manager.persistLocked(nextAccounts, nextActiveID); err != nil {
+		manager.mu.Unlock()
 		return err
 	}
 	manager.accounts, manager.activeID = nextAccounts, nextActiveID
+	manager.mu.Unlock()
+	if err := deleteAccountCredentials(ctx, provider, cloneAccount(account)); err != nil {
+		return fmt.Errorf("account was removed, but its credentials could not be deleted from the operating-system credential store")
+	}
 	return nil
+}
+
+func (manager *Manager) ResolveLaunchAccount(ctx context.Context, id string) (models.Account, error) {
+	unlock := manager.lockAccount(id)
+	defer unlock()
+	account, err := manager.GetAccount(ctx, id)
+	if err != nil {
+		return models.Account{}, cleerrors.Wrap(cleerrors.CodeAccountNotFound, "stored launch account was not found", err)
+	}
+	account = normalizeLaunchAccount(account)
+	if !requiresSessionResolution(account.Type) {
+		return account, nil
+	}
+	resolved, err := resolveStoredAccountWithProvider(ctx, manager, account)
+	if err != nil {
+		return models.Account{}, err
+	}
+	if !sameProfile(account.Profile, resolved.Profile) {
+		session := resolved.Session
+		resolved.Session = models.AccountSession{}
+		resolved.UpdatedAt = time.Now().UTC()
+		resolved, err = manager.updateAccount(id, resolved)
+		if err != nil {
+			return models.Account{}, err
+		}
+		resolved.Session = session
+	}
+	return resolved, nil
+}
+
+func (manager *Manager) lockAccount(id string) func() {
+	manager.locksMu.Lock()
+	lock := manager.locks[id]
+	if lock == nil {
+		lock = &accountLock{}
+		manager.locks[id] = lock
+	}
+	lock.refs++
+	manager.locksMu.Unlock()
+	lock.mu.Lock()
+	return func() {
+		lock.mu.Unlock()
+		manager.locksMu.Lock()
+		lock.refs--
+		if lock.refs == 0 {
+			delete(manager.locks, id)
+		}
+		manager.locksMu.Unlock()
+	}
+}
+
+func sameProfile(left, right models.GameProfile) bool {
+	if left.ID != right.ID || left.Name != right.Name || len(left.Properties) != len(right.Properties) {
+		return false
+	}
+	for index := range left.Properties {
+		if left.Properties[index] != right.Properties[index] {
+			return false
+		}
+	}
+	return true
 }
 
 func (manager *Manager) SetActiveAccount(ctx context.Context, id string) error {
@@ -306,11 +461,27 @@ func (manager *Manager) load() error {
 	}
 	accounts := make(map[string]models.Account, len(store.Accounts))
 	for _, account := range store.Accounts {
-		if account.ID == "" || account.Type != models.AccountOffline {
+		if account.ID == "" {
 			return fmt.Errorf("account store contains an unsupported or invalid account")
 		}
-		if err := NewOfflineProvider().Validate(context.Background(), account); err != nil {
-			return fmt.Errorf("account store contains invalid account %q: %w", account.ID, err)
+		switch account.Type {
+		case models.AccountOffline:
+			if err := NewOfflineProvider().Validate(context.Background(), account); err != nil {
+				return fmt.Errorf("account store contains invalid account %q: %w", account.ID, err)
+			}
+		case models.AccountYggdrasil:
+			if err := validateYggdrasilAccount(account); err != nil {
+				return fmt.Errorf("account store contains invalid account %q: %w", account.ID, err)
+			}
+			if _, err := validateYggdrasilServer(account.AuthServer, false); err != nil {
+				return fmt.Errorf("account store contains invalid Yggdrasil server for account %q", account.ID)
+			}
+		case models.AccountMicrosoft:
+			if err := validateMicrosoftAccount(account); err != nil {
+				return fmt.Errorf("account store contains invalid account %q: %w", account.ID, err)
+			}
+		default:
+			return fmt.Errorf("account store contains an unsupported or invalid account")
 		}
 		if _, exists := accounts[account.ID]; exists {
 			return fmt.Errorf("account store contains duplicate account ID %q", account.ID)
@@ -381,6 +552,16 @@ func cloneAccounts(accounts map[string]models.Account) map[string]models.Account
 func cloneAccount(account models.Account) models.Account {
 	account.Profile = cloneProfile(account.Profile)
 	return account
+}
+
+func deleteAccountCredentials(ctx context.Context, provider core.AccountProvider, account models.Account) error {
+	cleaner, ok := provider.(interface {
+		DeleteAccountCredentials(context.Context, models.Account) error
+	})
+	if !ok {
+		return nil
+	}
+	return cleaner.DeleteAccountCredentials(context.WithoutCancel(ctx), account)
 }
 
 func cloneProfile(profile models.GameProfile) models.GameProfile {

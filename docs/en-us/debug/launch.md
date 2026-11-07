@@ -33,13 +33,22 @@ Use `watch <task-id>` or `logs --task <task-id>` to focus output. `debug
 arguments <task-id>` displays resolved arguments after sensitive values have
 been redacted. Do not copy raw launch credentials into JSON request files.
 
-## Stored offline accounts
+## Stored accounts
 
-Create one with `account add offline Alex`, inspect it with `account list`, and
-start a request containing `{"account":{"id":"<stored-id>"}}`. If the request
-does not specify account identity, the active offline profile is used. Existing
-inline `{"account":{"name":"Alex","type":"offline"}}` requests continue to
-work.
+Create an Offline profile with `account add offline Alex`, or a Yggdrasil
+account with `account add yggdrasil <auth-server-url> <username>`. The latter
+prompts for the password without echo and requires HTTPS. Inspect accounts
+with `account list`, then start a request containing
+`{"account":{"id":"<stored-id>"}}`. If the request does not specify account
+identity, the active stored profile is used. Inline
+`{"account":{"name":"Alex","type":"offline"}}` requests continue to work.
 
-Offline profiles are local identities only; they do not prove ownership or
-provide online multiplayer authentication.
+Yggdrasil launches use the account's OS-keyring session; no token belongs in
+the launch JSON. The account's Yggdrasil API base URL is passed to Authlib
+Injector as a JVM agent so the Minecraft client uses the third-party service
+for its own session requests. CLE downloads the pinned, SHA-256-verified
+Authlib Injector 1.2.8 artifact on first launch; offline mode needs that
+verified artifact already cached under the game directory. Compatibility
+depends on the Minecraft/Authlib version and service; no real authentication
+or live game launch has been verified. Offline profiles are local identities
+only; they do not prove ownership or provide online multiplayer authentication.

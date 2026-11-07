@@ -127,7 +127,8 @@ func commandHelp(terminal *Terminal, args []string) error {
 	terminal.printLine("  logs [--task <id>|--process <pid>] [--limit <n>] [--follow]")
 	terminal.printLine("  watch [<task-id>|<pid>] | unwatch")
 	terminal.printLine("  debug info <task-id> | debug config | debug arguments|classpath|environment <task-id>")
-	terminal.printLine("  account list | add offline <name> [uuid] | inspect|profile|validate|refresh|logout|remove|switch <id>")
+	terminal.printLine("  account list | add offline <name> [uuid] | add yggdrasil <auth-server-url> <username> | add microsoft")
+	terminal.printLine("  account inspect|profile|validate|refresh|logout|remove|switch <id>")
 	terminal.printLine("Ctrl+C cancels the active launch, gracefully stops its running process, or exits.")
 	return nil
 }
@@ -215,10 +216,6 @@ func commandLaunch(terminal *Terminal, args []string) error {
 	if err != nil {
 		return err
 	}
-	request.Account, err = accounts.ResolveLaunchAccount(terminal.context(), terminal.accounts, request.Account)
-	if err != nil {
-		return fmt.Errorf("resolve launch account: %w", err)
-	}
 	task, err := terminal.engine.StartLaunch(terminal.context(), request)
 	if err != nil {
 		return err
@@ -293,8 +290,58 @@ func commandAccount(terminal *Terminal, args []string) error {
 		return nil
 	}
 	if len(args) >= 2 && args[0] == "add" {
+		if args[1] == "yggdrasil" {
+			if len(args) != 4 {
+				return errors.New("usage: account add yggdrasil <auth-server-url> <username>")
+			}
+			password, err := terminal.readSecret("Yggdrasil password (hidden): ")
+			if err != nil {
+				return err
+			}
+			request := models.AccountAuthRequest{
+				Type: models.AccountYggdrasil, AuthServer: args[2], Username: args[3],
+				Password: string(password),
+			}
+			zeroBytes(password)
+			account, authErr := terminal.accounts.AuthenticateAccount(ctx, request)
+			request.Password = ""
+			if authErr != nil {
+				return authErr
+			}
+			terminal.printLine(fmt.Sprintf("Created Yggdrasil account %s (%s), UUID %s.", account.Name, account.ID, account.UUID))
+			return nil
+		}
+		if args[1] == "microsoft" {
+			if len(args) != 2 {
+				return errors.New("usage: account add microsoft")
+			}
+			provider, err := terminal.accounts.Provider(models.AccountMicrosoft)
+			if err != nil {
+				return err
+			}
+			auth, ok := provider.(accounts.DeviceCodeAuthenticator)
+			if !ok {
+				return errors.New("Microsoft account provider is unavailable")
+			}
+			deviceCode, err := auth.StartDeviceCode(ctx)
+			if err != nil {
+				return err
+			}
+			terminal.printLine(fmt.Sprintf("Open %s and enter the code %s", deviceCode.VerificationURL, deviceCode.UserCode))
+			terminal.printLine("Waiting for Microsoft authorization (cancel with Ctrl+C)...")
+			account, err := auth.AuthenticateDeviceCode(ctx, deviceCode)
+			if err != nil {
+				return err
+			}
+			stored, err := terminal.accounts.AddAccount(ctx, account)
+			if err != nil {
+				return err
+			}
+			terminal.printLine(fmt.Sprintf("Created Microsoft account %s (%s), UUID %s.", stored.Name, stored.ID, stored.UUID))
+			return nil
+		}
 		if args[1] != "offline" || (len(args) != 3 && len(args) != 4) {
-			return errors.New("usage: account add offline <name> [uuid]")
+			return errors.New("usage: account add offline <name> [uuid] | account add yggdrasil <auth-server-url> <username> | account add microsoft")
 		}
 		request := models.AccountAuthRequest{Type: models.AccountOffline, Username: args[2]}
 		if len(args) == 4 {
@@ -308,7 +355,7 @@ func commandAccount(terminal *Terminal, args []string) error {
 		return nil
 	}
 	if len(args) != 2 {
-		return errors.New("usage: account list | add offline <name> [uuid] | inspect|profile|validate|refresh|logout|remove|switch <id>")
+		return errors.New("usage: account list | add offline <name> [uuid] | add yggdrasil <auth-server-url> <username> | add microsoft | inspect|profile|validate|refresh|logout|remove|switch <id>")
 	}
 	id := args[1]
 	switch args[0] {
@@ -353,7 +400,7 @@ func commandAccount(terminal *Terminal, args []string) error {
 		}
 		terminal.printLine("Active account set to " + id)
 	default:
-		return errors.New("usage: account list | add offline <name> [uuid] | inspect|profile|validate|refresh|logout|remove|switch <id>")
+		return errors.New("usage: account list | add offline <name> [uuid] | add yggdrasil <auth-server-url> <username> | add microsoft | inspect|profile|validate|refresh|logout|remove|switch <id>")
 	}
 	return nil
 }

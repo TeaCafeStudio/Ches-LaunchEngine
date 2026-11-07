@@ -299,9 +299,9 @@ func TestOfflineAccountCommandsAndLaunchIntegration(t *testing.T) {
 		t.Fatal(err)
 	}
 	if engine.startedRequest.Account.ID != account.ID ||
-		engine.startedRequest.Account.Name != "Test_User" ||
-		engine.startedRequest.Account.UUID != customUUID {
-		t.Fatalf("stored account was not resolved for launch: %+v", engine.startedRequest.Account)
+		engine.startedRequest.Account.Name != "" ||
+		engine.startedRequest.Account.UUID != "" {
+		t.Fatalf("terminal must pass only the account ID to Core: %+v", engine.startedRequest.Account)
 	}
 	if !strings.Contains(output.String(), customUUID) || strings.Contains(output.String(), "access-secret") {
 		t.Fatalf("account output is missing expected data or contains secrets: %s", output.String())
@@ -311,6 +311,50 @@ func TestOfflineAccountCommandsAndLaunchIntegration(t *testing.T) {
 	}
 	if _, err := accountManager.GetAccount(context.Background(), account.ID); err == nil {
 		t.Fatal("account remove command did not delete the account")
+	}
+}
+
+func TestYggdrasilPasswordRequiresHiddenInteractiveInput(t *testing.T) {
+	accountManager, err := accounts.NewManager("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	output := &strings.Builder{}
+	terminal, err := New(Options{
+		Engine: newTestEngine(), Accounts: accountManager, Config: config.Default(),
+		Input: strings.NewReader(""), Output: output,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := terminal.Execute("account add yggdrasil https://auth.example.org login"); err == nil ||
+		!strings.Contains(err.Error(), "secret input requires an interactive terminal") {
+		t.Fatalf("non-interactive Yggdrasil add error = %v", err)
+	}
+	if _, err := terminal.Execute("account add yggdrasil https://auth.example.org login visible-password"); err == nil ||
+		!strings.Contains(err.Error(), "usage: account add yggdrasil") ||
+		strings.Contains(err.Error(), "visible-password") {
+		t.Fatalf("password command argument was not rejected safely: %v", err)
+	}
+
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reader.Close()
+	defer writer.Close()
+	terminal.interactive = true
+	terminal.inputFile = reader
+	if _, err := writer.Write([]byte("hidden-password\n")); err != nil {
+		t.Fatal(err)
+	}
+	secret, err := terminal.readSecret("Password: ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer zeroBytes(secret)
+	if string(secret) != "hidden-password" || strings.Contains(output.String(), "hidden-password") {
+		t.Fatalf("hidden password handling exposed input: secret=%q output=%q", secret, output.String())
 	}
 }
 

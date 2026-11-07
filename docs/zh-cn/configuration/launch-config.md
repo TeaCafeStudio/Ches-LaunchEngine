@@ -22,7 +22,7 @@
 | `javaPath` | string | 可选 | Java 程序；默认使用配置值或自动检测 |
 | `javaArguments` | string array | 可选 | 附加 JVM 参数 |
 | `gameArguments` | string array | 可选 | 附加游戏参数 |
-| `account` | object | 启动需要离线账户 | 内联离线身份或已保存的 `id` |
+| `account` | object | 未由配置提供时必填 | 内联离线身份或已保存账户 `id`（离线、Yggdrasil 或 Microsoft） |
 | `loader` | object | 可选；默认 Vanilla | 目前 `type` 只支持 `vanilla`；`version` 为后续加载器预留 |
 | `downloadOptions` | object | 可选 | `offline` 布尔值；`concurrency` 为 0/默认或 1–64；`retries` 为 0/默认或 0–10 |
 | `window` | object | 可选 | `width`、`height` 整数和 `fullscreen` 布尔值 |
@@ -30,7 +30,7 @@
 | `workingDirectory` | string | 可选 | 必须是现存目录；否则使用游戏目录 |
 | `argumentMode` | string | 可选；默认 `auto` | `auto`、`legacy` 或 `modern` |
 
-账户模型还接受 `id`、`name`、`uuid`、`displayName`、`profile`、`type`、`credentialRef`、`xuid`、`userType` 和时间戳。本阶段只支持离线身份：使用有效 `name` 和可选标准 UUID，或已保存账户 `id`。启动请求不能包含 Token 或密码。
+账户模型还接受 `id`、`name`、`uuid`、`displayName`、`profile`、`type`、`authServer`、`credentialRef`、`xuid`、`userType` 和时间戳。可使用有效的内联离线身份或已保存账户 `id`。Yggdrasil 启动必须使用已保存账户 ID，以便 CLE 从操作系统凭据库读取并验证会话。Microsoft 启动同样必须使用已保存账户 ID；CLE 会从操作系统凭据库读取 Refresh Token，并在需要时自动刷新并重跑 Xbox/XSTS/Minecraft 链路以取得 Minecraft Access Token。启动请求不能包含 Token 或密码。
 
 使用已保存账户的例子：
 

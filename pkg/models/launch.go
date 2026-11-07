@@ -11,17 +11,19 @@ const (
 )
 
 type Account struct {
-	ID            string      `json:"id,omitempty"`
-	Name          string      `json:"name,omitempty"`
-	UUID          string      `json:"uuid,omitempty"`
-	DisplayName   string      `json:"displayName,omitempty"`
-	Profile       GameProfile `json:"profile,omitempty"`
-	Type          AccountType `json:"type,omitempty"`
-	CredentialRef string      `json:"credentialRef,omitempty"`
-	XUID          string      `json:"xuid,omitempty"`
-	UserType      string      `json:"userType,omitempty"`
-	CreatedAt     time.Time   `json:"createdAt,omitempty"`
-	UpdatedAt     time.Time   `json:"updatedAt,omitempty"`
+	ID            string         `json:"id,omitempty"`
+	Name          string         `json:"name,omitempty"`
+	UUID          string         `json:"uuid,omitempty"`
+	DisplayName   string         `json:"displayName,omitempty"`
+	Profile       GameProfile    `json:"profile,omitempty"`
+	Type          AccountType    `json:"type,omitempty"`
+	AuthServer    string         `json:"authServer,omitempty"`
+	CredentialRef string         `json:"credentialRef,omitempty"`
+	XUID          string         `json:"xuid,omitempty"`
+	UserType      string         `json:"userType,omitempty"`
+	Session       AccountSession `json:"-"`
+	CreatedAt     time.Time      `json:"createdAt,omitempty"`
+	UpdatedAt     time.Time      `json:"updatedAt,omitempty"`
 }
 
 type GameProfile struct {
@@ -37,16 +39,30 @@ type ProfileProperty struct {
 }
 
 type AccountAuthRequest struct {
-	Type     AccountType `json:"type"`
-	Username string      `json:"username"`
-	UUID     string      `json:"uuid,omitempty"`
-	Password string      `json:"-"`
+	Type       AccountType `json:"type"`
+	Username   string      `json:"username"`
+	UUID       string      `json:"uuid,omitempty"`
+	AuthServer string      `json:"authServer,omitempty"`
+	Password   string      `json:"-"`
+}
+
+// DeviceCode carries the OAuth 2.0 device authorization grant details surfaced
+// to the user before polling begins. The device code itself is a bearer secret
+// and is therefore never serialized.
+type DeviceCode struct {
+	VerificationURL string `json:"verificationUrl"`
+	UserCode        string `json:"userCode"`
+	DeviceCode      string `json:"-"`
+	Interval        int    `json:"interval"`
+	ExpiresIn       int    `json:"expiresIn"`
+	Message         string `json:"message,omitempty"`
 }
 
 type AccountSession struct {
 	AccessToken  string    `json:"-"`
 	RefreshToken string    `json:"-"`
 	ClientID     string    `json:"-"`
+	ClientToken  string    `json:"-"`
 	ExpiresAt    time.Time `json:"-"`
 }
 

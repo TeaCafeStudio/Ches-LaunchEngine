@@ -72,7 +72,7 @@ func run(args []string, input io.Reader, output, errorOutput io.Writer) error {
 			return err
 		}
 	}
-	accountManager, err := accounts.NewManager(accountStorePath)
+	accountManager, err := accounts.NewManagerWithClientID(accountStorePath, cfg.Account.Microsoft.ClientID)
 	if err != nil {
 		return fmt.Errorf("initialize account manager: %w", err)
 	}
@@ -85,7 +85,7 @@ func run(args []string, input io.Reader, output, errorOutput io.Writer) error {
 			logger.Error("close logger", "error", core.RedactText(closeErr.Error()))
 		}
 	}()
-	engine, err := sdk.NewDebugEngineWithConfig(cfg, logger, nil, "")
+	engine, err := sdk.NewDebugEngineWithConfigAndAccounts(cfg, logger, nil, "", accountManager)
 	if err != nil {
 		return err
 	}

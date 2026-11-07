@@ -21,6 +21,7 @@ type AccountProvider interface {
 type AccountManager interface {
 	Provider(models.AccountType) (AccountProvider, error)
 	AuthenticateAccount(context.Context, models.AccountAuthRequest) (models.Account, error)
+	AddAccount(context.Context, models.Account) (models.Account, error)
 	ListAccounts(context.Context) ([]models.Account, error)
 	GetAccount(context.Context, string) (models.Account, error)
 	ValidateAccount(context.Context, string) error

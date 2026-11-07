@@ -14,5 +14,8 @@ the formal `cle` CLI, the separate `cle-debug` developer terminal, and a Go SDK.
 - [HTTP API status](api/overview.md) · [JSON conventions](api/json-format.md) · [Planned endpoints](api/endpoints.md)
 - [Go SDK](sdk/go.md) · [Build](development/build.md) · [Architecture](development/architecture.md) · [Contributing](development/contribution.md)
 
-Microsoft/Yggdrasil authentication, non-Go SDK bindings, mod loaders, and the
-HTTP API are not implemented.
+Offline and Yggdrasil account support are implemented. Yggdrasil launch uses a
+SHA-256-pinned Authlib Injector 1.2.8 Java Agent; real authentication, reaching
+the Minecraft main menu, and OS credential-store runtime behavior have not
+been verified. Microsoft authentication, non-Go SDK bindings, mod loaders,
+and the HTTP API are not implemented.

@@ -56,3 +56,6 @@ accounts.*.json
 *.key
 *.p12
 *.pfx
+
+# Minecraft game runtime data (download cache, saves, logs, options, etc.)
+/.minecraft/

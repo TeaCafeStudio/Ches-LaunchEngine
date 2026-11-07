@@ -20,7 +20,7 @@ are errors.
 | `download.offline` | boolean | No | `false`. |
 | `java.path` | string | No | Empty; detect from host. |
 | `account.defaultProvider` | string | No | Empty; only `offline` is currently accepted. |
-| `account.credentialStore` | string | No | Empty; non-empty value is rejected in Phase 4.1.1. |
+| `account.credentialStore` | string | No | Empty; currently supports `os` (the default OS credential store). |
 | `account.storePath` | string | No | Empty; OS user config path is used. Must not be whitespace. |
 | `logging.level` | string | No | `INFO`; `DEBUG`, `INFO`, `WARN`, `ERROR`. |
 | `logging.console` | boolean | No | `true`; logs go to stderr. |

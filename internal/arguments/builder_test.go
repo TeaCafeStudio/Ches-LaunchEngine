@@ -146,3 +146,51 @@ func TestBuildOfflineAuthenticationArgumentsForModernAndLegacyMetadata(t *testin
 		})
 	}
 }
+
+func TestBuildYggdrasilAuthenticationArgumentsAndRejectsInvalidSession(t *testing.T) {
+	const profileID = "123456781234123412341234567890ab"
+	version := metadata.VersionMetadata{
+		ID: "1.21.1", MainClass: "example.Main",
+		Arguments: &metadata.Arguments{Game: []json.RawMessage{
+			json.RawMessage(`"--username"`),
+			json.RawMessage(`"${auth_player_name}"`),
+			json.RawMessage(`"--uuid"`),
+			json.RawMessage(`"${auth_uuid}"`),
+			json.RawMessage(`"--accessToken"`),
+			json.RawMessage(`"${auth_access_token}"`),
+			json.RawMessage(`"--userType"`),
+			json.RawMessage(`"${user_type}"`),
+			json.RawMessage(`"--session"`),
+			json.RawMessage(`"${auth_session}"`),
+			json.RawMessage(`"--user-properties"`),
+			json.RawMessage(`"${user_properties}"`),
+		}},
+	}
+	account := models.Account{
+		Name: "Online_Player", UUID: profileID, Type: models.AccountYggdrasil, UserType: "legacy",
+		Profile: models.GameProfile{
+			ID: profileID, Name: "Online_Player",
+			Properties: []models.ProfileProperty{{Name: "textures", Value: "texture-data", Signature: "texture-signature"}},
+		},
+		Session: models.AccountSession{AccessToken: "private-token", ClientToken: "private-client"},
+	}
+	args, err := Build(Options{Version: version, Request: models.LaunchRequest{Account: account}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"-Djava.library.path=", "-cp", "", "example.Main",
+		"--username", "Online_Player", "--uuid", profileID,
+		"--accessToken", "private-token", "--userType", "legacy",
+		"--session", "token:private-token:" + profileID,
+		"--user-properties", `{"textures":[{"name":"textures","value":"texture-data","signature":"texture-signature"}]}`,
+	}
+	if !reflect.DeepEqual(args, want) {
+		t.Fatalf("Build() args:\n%q\nwant:\n%q", args, want)
+	}
+
+	account.Profile.Name = "Different_Player"
+	if _, err := Build(Options{Version: version, Request: models.LaunchRequest{Account: account}}); err == nil {
+		t.Fatal("Build() accepted a session whose username differs from the selected profile")
+	}
+}

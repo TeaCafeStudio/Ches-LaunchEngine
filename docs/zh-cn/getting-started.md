@@ -33,6 +33,23 @@ account list
 
 离线身份不是 Mojang/Microsoft 账户，不能通过正版在线模式服务器认证。账户资料保存在操作系统用户配置目录中，不包含 Token。详见[账户说明](configuration/accounts.md)。
 
+## 创建 Microsoft 正版账户
+
+先配置 Microsoft 公共客户端应用 ID（配置 `account.microsoft.clientId` 或环境
+变量 `CLE_MICROSOFT_CLIENT_ID`），然后在 `cle-debug` 输入：
+
+```text
+account add microsoft
+```
+
+按提示在浏览器打开验证网址并输入用户代码完成授权。也可使用正式 CLI：
+
+```powershell
+.\cle.exe account add microsoft --config .\cle.json
+```
+
+详见[账户说明](configuration/accounts.md)。
+
 ## 启动 Minecraft
 
 复制 [`examples/launch/vanilla.json`](../../examples/launch/vanilla.json)，设置适合本机的 `gameDirectory` 和 `javaPath`：

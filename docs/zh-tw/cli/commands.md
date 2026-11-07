@@ -45,6 +45,30 @@ cle --json -check-config cle.json
 cle --json -launch request.json
 ```
 
+## `cle account`
+
+帳戶管理子命令。可用 `--config <cle.json>` 指定 CLE 設定（用於讀取
+`account.storePath` 和 `account.microsoft.clientId`），並可用 `--json` 輸出
+JSON。子命令：
+
+| 命令 | 用途 |
+|---|---|
+| `cle account list` | 列出已儲存帳戶並標示作用中帳戶 |
+| `cle account add microsoft` | 啟動 OAuth Device Code 登入；驗證網址與使用者代碼寫入 stderr，輪詢至完成 |
+| `cle account show <account-id>` | 查看非敏感帳戶資料 |
+| `cle account remove <account-id>` | 刪除帳戶及對應憑證 |
+
+```powershell
+cle account add microsoft --config .\cle.json
+cle account list
+cle account show <account-id>
+cle account remove <account-id>
+```
+
+Microsoft 帳戶需要 Microsoft 公開用戶端應用程式 ID（設定檔
+`account.microsoft.clientId` 或環境變數 `CLE_MICROSOFT_CLIENT_ID`）；CLE 不
+內建 Client ID。
+
 ## `cle debug`
 
 僅用於顯示遷移提示，不會初始化或匯入除錯終端機。請改用 `cle-debug`。

@@ -49,9 +49,17 @@
       "additionalProperties": false,
       "description": "Account profile storage settings; never put tokens or passwords in this file.",
       "properties": {
-        "defaultProvider": { "type": "string", "enum": ["", "offline"], "description": "Only offline is currently supported." },
-        "credentialStore": { "type": "string", "enum": [""], "description": "Reserved; no operating-system credential store is implemented." },
-        "storePath": { "type": "string", "description": "Path for non-sensitive account profiles." }
+        "defaultProvider": { "type": "string", "enum": ["", "offline", "yggdrasil", "microsoft"], "description": "Default account provider." },
+        "credentialStore": { "type": "string", "enum": ["", "os"], "default": "os", "description": "Operating-system credential store (Windows Credential Manager, macOS Keychain, or Linux Secret Service). Empty uses the OS store." },
+        "storePath": { "type": "string", "description": "Path for non-sensitive account profiles." },
+        "microsoft": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Microsoft Account authentication settings. The clientId is an application (public client) identifier owned by the operator; CLE never bundles a hard-coded Client ID or Client Secret.",
+          "properties": {
+            "clientId": { "type": "string", "description": "OAuth 2.0 public client application ID. May also be provided via the CLE_MICROSOFT_CLIENT_ID environment variable." }
+          }
+        }
       }
     },
     "logging": {

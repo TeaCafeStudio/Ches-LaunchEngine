@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/TeaCafeStudio/Ches-LaunchEngine/internal/arguments"
+	"github.com/TeaCafeStudio/Ches-LaunchEngine/internal/authlibinjector"
 	"github.com/TeaCafeStudio/Ches-LaunchEngine/internal/config"
 	"github.com/TeaCafeStudio/Ches-LaunchEngine/internal/download"
 	"github.com/TeaCafeStudio/Ches-LaunchEngine/internal/metadata"
@@ -33,6 +34,7 @@ type EngineOptions struct {
 	Logger      *slog.Logger
 	HTTPClient  *http.Client
 	ManifestURL string
+	Accounts    core.AccountManager
 }
 
 type taskState struct {
@@ -50,6 +52,7 @@ type Engine struct {
 	logger      *slog.Logger
 	downloader  *download.Manager
 	resolver    *metadata.Resolver
+	accounts    core.AccountManager
 	mu          sync.RWMutex
 	tasks       map[string]*taskState
 	subscribers map[string]map[uint64]chan models.LaunchStatusEvent
@@ -91,21 +94,27 @@ func NewEngine(options EngineOptions) (*Engine, error) {
 	}
 	return &Engine{
 		config: cfg, logger: options.Logger, downloader: downloader,
-		resolver: resolver, tasks: make(map[string]*taskState),
+		resolver: resolver, accounts: options.Accounts, tasks: make(map[string]*taskState),
 		subscribers: make(map[string]map[uint64]chan models.LaunchStatusEvent),
 		eventSubs:   make(map[uint64]chan core.Event),
 	}, nil
 }
 
-func (engine *Engine) Validate(_ context.Context, request models.LaunchRequest) error {
+func (engine *Engine) Validate(ctx context.Context, request models.LaunchRequest) error {
+	account, err := accounts.ResolveLaunchAccount(ctx, engine.accounts, request.Account)
+	if err != nil {
+		return err
+	}
+	request.Account = account
+	return engine.validateResolved(request)
+}
+
+func (engine *Engine) validateResolved(request models.LaunchRequest) error {
 	if strings.TrimSpace(request.VersionID) == "" {
 		return cleerrors.New(cleerrors.CodeVersionJSONInvalid, "versionId is required")
 	}
 	if strings.TrimSpace(request.GameDirectory) == "" && strings.TrimSpace(engine.config.Paths.GameDirectory) == "" {
 		return cleerrors.New(cleerrors.CodeInvalidGameDirectory, "gameDirectory is required")
-	}
-	if request.Account.Type != "" && request.Account.Type != models.AccountOffline {
-		return cleerrors.New(cleerrors.CodeAccountProviderNotFound, "only offline accounts are supported in Phase 4.1")
 	}
 	username := request.Account.Name
 	if username == "" {
@@ -118,8 +127,39 @@ func (engine *Engine) Validate(_ context.Context, request models.LaunchRequest) 
 	if uuid == "" {
 		uuid = request.Account.Profile.ID
 	}
-	if err := accounts.ValidateOfflineIdentity(username, uuid); err != nil {
-		return cleerrors.Wrap(cleerrors.CodeAuthenticationFailed, "invalid offline account", err)
+	switch request.Account.Type {
+	case models.AccountOffline, "":
+		if err := accounts.ValidateOfflineIdentity(username, uuid); err != nil {
+			return cleerrors.Wrap(cleerrors.CodeAuthenticationFailed, "invalid offline account", err)
+		}
+	case models.AccountYggdrasil:
+		if request.Account.ID == "" || request.Account.AuthServer == "" {
+			return cleerrors.New(cleerrors.CodeAccountNotFound, "Yggdrasil launch requires a stored account")
+		}
+		if request.Account.Profile.ID == "" || request.Account.Profile.Name == "" {
+			return cleerrors.New(cleerrors.CodeProfileUnavailable, "Yggdrasil account has no game profile")
+		}
+		if request.Account.Session.AccessToken == "" || request.Account.Session.ClientToken == "" {
+			return cleerrors.New(cleerrors.CodeSessionInvalid, "Yggdrasil launch requires a validated session")
+		}
+		if username != request.Account.Profile.Name || uuid != request.Account.Profile.ID {
+			return cleerrors.New(cleerrors.CodeProfileUnavailable, "Yggdrasil launch identity does not match the selected game profile")
+		}
+	case models.AccountMicrosoft:
+		if request.Account.ID == "" {
+			return cleerrors.New(cleerrors.CodeAccountNotFound, "Microsoft launch requires a stored account")
+		}
+		if request.Account.Profile.ID == "" || request.Account.Profile.Name == "" {
+			return cleerrors.New(cleerrors.CodeProfileUnavailable, "Microsoft account has no game profile")
+		}
+		if request.Account.Session.AccessToken == "" {
+			return cleerrors.New(cleerrors.CodeSessionInvalid, "Microsoft launch requires a validated Minecraft session")
+		}
+		if username != request.Account.Profile.Name || uuid != request.Account.Profile.ID {
+			return cleerrors.New(cleerrors.CodeProfileUnavailable, "Microsoft launch identity does not match the selected game profile")
+		}
+	default:
+		return cleerrors.New(cleerrors.CodeAccountTypeUnsupported, "this account type is not supported for Minecraft launch")
 	}
 	if request.Loader.Type != "" && request.Loader.Type != models.LoaderVanilla {
 		return cleerrors.New(cleerrors.CodeLoaderInstallFailed, "only Vanilla versions are supported in Phase 2")
@@ -172,7 +212,21 @@ func (engine *Engine) StartLaunch(ctx context.Context, request models.LaunchRequ
 func (engine *Engine) createLaunchTask(ctx context.Context, request models.LaunchRequest) (string, context.Context, context.CancelFunc, models.LaunchTask, error) {
 	taskID := fmt.Sprintf("cle-%d-%d", time.Now().UnixNano(), engine.nextID.Add(1))
 	accountType := request.Account.Type
-	if accountType == "" {
+	if accountType == "" && engine.accounts != nil {
+		var account models.Account
+		var err error
+		if request.Account.ID != "" {
+			account, err = engine.accounts.GetAccount(ctx, request.Account.ID)
+		} else if request.Account.Name == "" && request.Account.DisplayName == "" && request.Account.Profile.Name == "" {
+			account, err = engine.accounts.ActiveAccount(ctx)
+		}
+		if err == nil {
+			accountType = account.Type
+		}
+	}
+	hasInlineIdentity := request.Account.Name != "" || request.Account.DisplayName != "" ||
+		request.Account.Profile.Name != ""
+	if accountType == "" && request.Account.ID == "" && (engine.accounts == nil || hasInlineIdentity) {
 		accountType = models.AccountOffline
 	}
 	loaderType := request.Loader.Type
@@ -216,7 +270,12 @@ func (engine *Engine) runLaunch(taskID string, operationCtx context.Context, can
 		current, _ := engine.GetLaunchStatus(taskID)
 		return current, err
 	}
-	if err := engine.Validate(operationCtx, request); err != nil {
+	account, err := accounts.ResolveLaunchAccount(operationCtx, engine.accounts, request.Account)
+	if err != nil {
+		return fail(err)
+	}
+	request.Account = account
+	if err := engine.validateResolved(request); err != nil {
 		return fail(err)
 	}
 	if request.Account.Type == "" {
@@ -318,6 +377,14 @@ func (engine *Engine) runLaunch(taskID string, operationCtx context.Context, can
 	}
 
 	engine.updateTask(taskID, models.LaunchDownloading, nil)
+	var authlibPath string
+	if request.Account.Type == models.AccountYggdrasil {
+		authlibPath, err = authlibinjector.Resolve(operationCtx, gameDirectory,
+			request.DownloadOptions.Offline || engine.config.Download.Offline)
+		if err != nil {
+			return fail(err)
+		}
+	}
 	concurrency := request.DownloadOptions.Concurrency
 	if concurrency == 0 {
 		concurrency = engine.config.Download.Concurrency
@@ -357,7 +424,17 @@ func (engine *Engine) runLaunch(taskID string, operationCtx context.Context, can
 		Platform: ruleContext,
 	})
 	if err != nil {
-		return fail(err)
+		var engineError *cleerrors.Error
+		if errors.As(err, &engineError) {
+			return fail(err)
+		}
+		return fail(cleerrors.Wrap(cleerrors.CodeLaunchArgumentBuildFailed, "build Minecraft launch arguments", err))
+	}
+	if request.Account.Type == models.AccountYggdrasil {
+		argumentsList, err = addAuthlibInjector(argumentsList, version.MainClass, authlibPath, request.Account.AuthServer)
+		if err != nil {
+			return fail(err)
+		}
 	}
 	mainClassIndex := len(argumentsList)
 	for index, argument := range argumentsList {
@@ -453,6 +530,21 @@ func (engine *Engine) runLaunch(taskID string, operationCtx context.Context, can
 	}()
 	result, _ := engine.GetLaunchStatus(taskID)
 	return result, nil
+}
+
+func addAuthlibInjector(argumentsList []string, mainClass, jarPath, apiURL string) ([]string, error) {
+	for index, argument := range argumentsList {
+		if argument != mainClass {
+			continue
+		}
+		agentArgument := "-javaagent:" + jarPath + "=" + apiURL
+		result := make([]string, 0, len(argumentsList)+2)
+		result = append(result, argumentsList[:index]...)
+		result = append(result, agentArgument, "-Dauthlibinjector.noLogFile")
+		result = append(result, argumentsList[index:]...)
+		return result, nil
+	}
+	return nil, cleerrors.New(cleerrors.CodeLaunchArgumentBuildFailed, "Minecraft main class was not found while configuring Authlib Injector")
 }
 
 func (engine *Engine) gameDirectory(request models.LaunchRequest) (string, error) {

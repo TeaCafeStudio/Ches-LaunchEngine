@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/TeaCafeStudio/Ches-LaunchEngine/internal/metadata"
 	"github.com/TeaCafeStudio/Ches-LaunchEngine/pkg/accounts"
@@ -32,14 +33,15 @@ type InstallPaths struct {
 	Classpath        []string
 }
 
+var yggdrasilProfileIDPattern = regexp.MustCompile(`(?i)^[0-9a-f]{32}$`)
+var yggdrasilProfileNamePattern = regexp.MustCompile(`^[A-Za-z0-9_]{1,16}$`)
+var microsoftXUIDPattern = regexp.MustCompile(`^[0-9A-Fa-f]{16}$`)
+
 func Build(options Options) ([]string, error) {
 	request := options.Request
 	accountType := request.Account.Type
 	if accountType == "" {
 		accountType = models.AccountOffline
-	}
-	if accountType != models.AccountOffline {
-		return nil, cleerrors.New(cleerrors.CodeAccountProviderNotFound, "the argument builder only accepts accounts resolved by a supported provider")
 	}
 	username := request.Account.Name
 	if username == "" {
@@ -52,8 +54,50 @@ func Build(options Options) ([]string, error) {
 	if uuid == "" {
 		uuid = request.Account.Profile.ID
 	}
-	if err := accounts.ValidateOfflineIdentity(username, uuid); err != nil {
-		return nil, cleerrors.Wrap(cleerrors.CodeAuthenticationFailed, "invalid offline account", err)
+	accessToken := "0"
+	userType := "legacy"
+	xuid := ""
+	switch accountType {
+	case models.AccountOffline:
+		if err := accounts.ValidateOfflineIdentity(username, uuid); err != nil {
+			return nil, cleerrors.Wrap(cleerrors.CodeAuthenticationFailed, "invalid offline account", err)
+		}
+	case models.AccountYggdrasil:
+		uuid = strings.ToLower(strings.ReplaceAll(uuid, "-", ""))
+		profileUUID := strings.ToLower(strings.ReplaceAll(request.Account.Profile.ID, "-", ""))
+		if !request.Account.Session.ExpiresAt.IsZero() && time.Now().After(request.Account.Session.ExpiresAt) {
+			return nil, cleerrors.New(cleerrors.CodeAuthenticationFailed, "Yggdrasil account session has expired")
+		}
+		if !yggdrasilProfileIDPattern.MatchString(uuid) ||
+			!yggdrasilProfileNamePattern.MatchString(username) ||
+			uuid != profileUUID || username != request.Account.Profile.Name ||
+			request.Account.Session.AccessToken == "" {
+			return nil, cleerrors.New(cleerrors.CodeAuthenticationFailed, "Yggdrasil account profile or session is invalid")
+		}
+		accessToken = request.Account.Session.AccessToken
+		if request.Account.UserType != "" {
+			userType = request.Account.UserType
+		}
+	case models.AccountMicrosoft:
+		uuid = strings.ToLower(strings.ReplaceAll(uuid, "-", ""))
+		profileUUID := strings.ToLower(strings.ReplaceAll(request.Account.Profile.ID, "-", ""))
+		if !request.Account.Session.ExpiresAt.IsZero() && time.Now().After(request.Account.Session.ExpiresAt) {
+			return nil, cleerrors.New(cleerrors.CodeAuthenticationFailed, "Microsoft account session has expired")
+		}
+		if !yggdrasilProfileIDPattern.MatchString(uuid) ||
+			!yggdrasilProfileNamePattern.MatchString(username) ||
+			uuid != profileUUID || username != request.Account.Profile.Name ||
+			request.Account.Session.AccessToken == "" {
+			return nil, cleerrors.New(cleerrors.CodeAuthenticationFailed, "Microsoft account profile or session is invalid")
+		}
+		if request.Account.XUID != "" && !microsoftXUIDPattern.MatchString(request.Account.XUID) {
+			return nil, cleerrors.New(cleerrors.CodeAuthenticationFailed, "Microsoft account has an invalid Xbox user hash")
+		}
+		accessToken = request.Account.Session.AccessToken
+		userType = "msa"
+		xuid = request.Account.XUID
+	default:
+		return nil, cleerrors.New(cleerrors.CodeAccountProviderNotFound, "the argument builder only accepts accounts resolved by a supported provider")
 	}
 	mode := request.ArgumentMode
 	if mode == "" || mode == models.ArgumentModeAuto {
@@ -88,8 +132,10 @@ func Build(options Options) ([]string, error) {
 		return nil, cleerrors.New(cleerrors.CodeArgumentResolutionFailed, "unsupported argument mode")
 	}
 
-	values := argumentValues(options)
-	var err error
+	values, err := argumentValues(options, username, uuid, accessToken, userType, xuid)
+	if err != nil {
+		return nil, cleerrors.Wrap(cleerrors.CodeArgumentResolutionFailed, "resolve account argument values", err)
+	}
 	jvmArgs, err = substitute(jvmArgs, values)
 	if err != nil {
 		return nil, cleerrors.Wrap(cleerrors.CodeArgumentResolutionFailed, "resolve JVM argument placeholders", err)
@@ -169,20 +215,9 @@ func substitute(args []string, values map[string]string) ([]string, error) {
 	return result, nil
 }
 
-func argumentValues(options Options) map[string]string {
+func argumentValues(options Options, username, uuid, accessToken, userType, xuid string) (map[string]string, error) {
 	version := options.Version
 	request := options.Request
-	username := request.Account.Name
-	if username == "" {
-		username = request.Account.DisplayName
-	}
-	if username == "" {
-		username = request.Account.Profile.Name
-	}
-	uuid := request.Account.UUID
-	if uuid == "" {
-		uuid = request.Account.Profile.ID
-	}
 	if uuid == "" {
 		uuid = OfflineUUID(username)
 	}
@@ -204,10 +239,10 @@ func argumentValues(options Options) map[string]string {
 		"assets_root":       options.Install.AssetsRoot,
 		"assets_index_name": options.Install.AssetIndex,
 		"auth_uuid":         strings.ReplaceAll(uuid, "-", ""),
-		"auth_access_token": "0",
+		"auth_access_token": accessToken,
 		"clientid":          "",
-		"auth_xuid":         "",
-		"user_type":         "legacy",
+		"auth_xuid":         xuid,
+		"user_type":         userType,
 		"version_type":      versionType,
 		"natives_directory": options.Install.NativesPath,
 		"launcher_name":     "ChesLaunchEngine",
@@ -220,7 +255,37 @@ func argumentValues(options Options) map[string]string {
 		"auth_session":      "0",
 		"path":              options.Install.LogConfig,
 	}
-	return values
+	if request.Account.Type == models.AccountYggdrasil {
+		userProperties, err := marshalUserProperties(request.Account.Profile.Properties)
+		if err != nil {
+			return nil, err
+		}
+		values["auth_session"] = "token:" + accessToken + ":" + strings.ReplaceAll(uuid, "-", "")
+		values["user_properties"] = userProperties
+	}
+	return values, nil
+}
+
+func marshalUserProperties(properties []models.ProfileProperty) (string, error) {
+	if len(properties) == 0 {
+		return "{}", nil
+	}
+	type propertyValue struct {
+		Name      string `json:"name"`
+		Value     string `json:"value"`
+		Signature string `json:"signature,omitempty"`
+	}
+	grouped := make(map[string][]propertyValue, len(properties))
+	for _, property := range properties {
+		grouped[property.Name] = append(grouped[property.Name], propertyValue{
+			Name: property.Name, Value: property.Value, Signature: property.Signature,
+		})
+	}
+	encoded, err := json.Marshal(grouped)
+	if err != nil {
+		return "", err
+	}
+	return string(encoded), nil
 }
 
 func hasClassPath(arguments []string) bool {

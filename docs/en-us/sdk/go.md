@@ -32,7 +32,25 @@ task, err := engine.Launch(ctx, request)
 `NewDebugEngine` returns `core.DebugEngine` for task/event/process diagnostics.
 SDK options include game/version directories, Java path, offline download
 mode, download concurrency/retries/timeouts, launch timeout, logger, HTTP
-client, and manifest URL.
+client, manifest URL, and an optional public `core.AccountManager`. Supply the
+account manager when launching stored accounts:
 
-Only Vanilla/offline launch is implemented. External developers should not
-import `internal` packages; use public `pkg/core`, `pkg/models`, and `pkg/sdk`.
+```go
+engine, err := sdk.NewEngine(sdk.Options{
+    GameDirectory: ".minecraft",
+    Accounts:      accountManager,
+})
+```
+
+The launch request should contain only `models.Account{ID: storedAccountID}`;
+Core resolves the selected provider, validates/refreshes the session, and
+builds the profile arguments. For config-based construction use
+`NewEngineWithConfigAndAccounts` or `NewDebugEngineWithConfigAndAccounts`.
+
+Vanilla/offline launch and Yggdrasil launch are implemented. The Yggdrasil
+path injects Authlib Injector 1.2.8 as a JVM agent after verifying its pinned
+SHA-256. Protocol and launch wiring have mock coverage, but real authentication
+and entering the Minecraft main menu have not been verified. Microsoft
+authentication, mod loaders, and HTTP API are not implemented. External
+developers should not import `internal` packages; use public `pkg/core`,
+`pkg/models`, and `pkg/sdk`.

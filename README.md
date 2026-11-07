@@ -24,9 +24,22 @@ the terminal package. The old `cle debug` form prints a migration message; use
 - Vanilla launch and offline profiles.
 - Version metadata, Java runtime detection, verified libraries/assets, launch
   argument construction, managed processes, and Debug Terminal event output.
-- Microsoft and Yggdrasil authentication, mod loaders, and HTTP server/API are
-  not implemented. Offline profiles cannot authenticate to online-mode
-  servers.
+- Offline, third-party Yggdrasil, and Microsoft (premium) authentication.
+  Offline and Yggdrasil/Microsoft credentials are stored in the
+  operating-system keyring; mod loaders and the HTTP server/API are not
+  implemented. Offline profiles cannot authenticate to online-mode servers.
+- Microsoft accounts use the OAuth 2.0 Device Code flow, Xbox Live, XSTS,
+  Minecraft Services login, entitlement check, and game profile retrieval. The
+  Microsoft chain requires a Microsoft public-client application ID configured
+  through `account.microsoft.clientId` or the `CLE_MICROSOFT_CLIENT_ID`
+  environment variable; CLE ships no hard-coded Client ID or Client Secret.
+- Yggdrasil launch injects the pinned Authlib Injector 1.2.8 agent, downloaded
+  from its official HTTPS distribution endpoint and SHA-256 verified. Its
+  compatibility depends on the Minecraft/Authlib version and Yggdrasil server.
+- Yggdrasil and Microsoft protocols, account resolution, and JVM argument
+  wiring have automated mock-server coverage; real authentication, entry into
+  the Minecraft main menu, and OS credential-store runtime behavior have not
+  been verified.
 
 ## Quick start
 
@@ -56,12 +69,35 @@ machine's Java/game paths, then launch:
 cle -launch ./examples/launch/vanilla.json
 ```
 
-Start the developer terminal and add an offline profile:
+Start the developer terminal and add an offline, Yggdrasil, or Microsoft
+account:
 
 ```text
 cle-debug
 account add offline Player_Name
 ```
+
+Microsoft accounts use the OAuth Device Code flow and require a Microsoft
+public-client application ID (see
+[accounts](docs/en-us/configuration/accounts.md)):
+
+```text
+account add microsoft
+```
+
+Yggdrasil account passwords are read only through a hidden interactive prompt.
+Use the server's Yggdrasil API base URL (the same base used for
+`/authserver/authenticate`), not a login webpage:
+
+```text
+account add yggdrasil https://auth.example.org login-name
+```
+
+Yggdrasil services must use HTTPS. HTTP is accepted only for explicitly
+enabled loopback test servers in programmatic use, not by the CLI.
+The first Yggdrasil launch downloads Authlib Injector 1.2.8 into the game
+directory's verified library cache; offline launch requires that verified JAR
+to already exist there. No live Yggdrasil account or service is bundled.
 
 For terminal details, run `help` or see the
 [Debug Terminal command guide](docs/en-us/debug/commands.md).

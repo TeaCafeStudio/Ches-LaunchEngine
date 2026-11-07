@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/TeaCafeStudio/Ches-LaunchEngine/pkg/core"
+	cleerrors "github.com/TeaCafeStudio/Ches-LaunchEngine/pkg/errors"
 	"github.com/TeaCafeStudio/Ches-LaunchEngine/pkg/models"
 )
 
@@ -110,25 +111,27 @@ func TestOfflineAccountCustomUUIDAndValidation(t *testing.T) {
 	}
 }
 
-func TestUnsupportedAccountProviderIsNotFabricated(t *testing.T) {
+func TestAccountProvidersAreRegistered(t *testing.T) {
 	manager, err := NewManager("")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := manager.Provider(models.AccountMicrosoft); !errors.Is(err, core.ErrAccountOperationUnsupported) {
-		t.Fatalf("Provider(Microsoft) error = %v", err)
+	for _, accountType := range []models.AccountType{models.AccountOffline, models.AccountYggdrasil, models.AccountMicrosoft} {
+		if _, err := manager.Provider(accountType); err != nil {
+			t.Fatalf("Provider(%s): %v", accountType, err)
+		}
 	}
-	if _, err := manager.Provider(models.AccountOffline); err != nil {
-		t.Fatalf("Provider(offline): %v", err)
+	if _, err := manager.Provider(models.AccountType("unknown")); !errors.Is(err, core.ErrAccountOperationUnsupported) {
+		t.Fatalf("Provider(unknown) error = %v", err)
 	}
 	if err := manager.RegisterProvider(NewOfflineProvider()); err == nil {
 		t.Fatal("duplicate provider registration succeeded")
 	}
-	_, err = manager.AuthenticateAccount(context.Background(), models.AccountAuthRequest{
-		Type: models.AccountYggdrasil, Username: "third-party",
-	})
-	if !errors.Is(err, core.ErrAccountOperationUnsupported) {
-		t.Fatalf("unsupported provider error = %v", err)
+	// Microsoft authentication is interactive and must use the device code flow.
+	_, err = manager.AuthenticateAccount(context.Background(), models.AccountAuthRequest{Type: models.AccountMicrosoft})
+	var engineError *cleerrors.Error
+	if !errors.As(err, &engineError) || engineError.Code != cleerrors.CodeAuthenticationFailed {
+		t.Fatalf("Microsoft AuthenticateAccount error = %v", err)
 	}
 }
 
