@@ -1,5 +1,5 @@
 # ChesLaunchEngine
-[![GitHub Stars](https://img.shields.io/github/stars/TeaCafeStudio/Ches-LaunchEngine?style=flat-square)(https://github.com/TeaCafeStudio/Ches-LaunchEngine/stargazers)
+[![GitHub Stars](https://img.shields.io/github/stars/TeaCafeStudio/Ches-LaunchEngine?style=flat-square)](https://github.com/TeaCafeStudio/Ches-LaunchEngine/stargazers)
 [![GitHub Forks](https://img.shields.io/github/forks/Cheeses233/MinecraftParticleImageGenerator?style=flat-square)](https://github.com/TeaCafeStudio/Ches-LaunchEngine/network/members)
 [![GitHub Issues](https://img.shields.io/github/issues/Cheeses233/MinecraftParticleImageGenerator?style=flat-square)](https://github.com/TeaCafeStudio/Ches-LaunchEngine/issues)
 [![GitHub Releases](https://img.shields.io/github/v/release/TeaCafeStudio/Ches-LaunchEngine?style=flat-square)](https://github.com/TeaCafeStudio/Ches-LaunchEngine/releases)
