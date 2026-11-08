@@ -4,6 +4,8 @@
 [![GitHub Issues](https://img.shields.io/github/issues/TeaCafeStudio/Ches-LaunchEngine?style=flat-square)](https://github.com/TeaCafeStudio/Ches-LaunchEngine/issues)
 [![GitHub Releases](https://img.shields.io/github/v/release/TeaCafeStudio/Ches-LaunchEngine?style=flat-square)](https://github.com/TeaCafeStudio/Ches-LaunchEngine/releases)
 
+> **Languages:** [English](README.md) · [简体中文](README.zh-CN.md) · [日本語](README.ja.md)
+
 ChesLaunchEngine (CLE) is a modular, cross-platform Go backend for Minecraft:
 Java Edition. It is an engine, not a graphical launcher.
 
